@@ -1,0 +1,71 @@
+# add_executable(go2_trajectory_follow go2_trajectory_follow.cpp)
+# target_link_libraries(go2_trajectory_follow unitree_sdk2)
+
+add_executable(go2_sport_client go2_sport_client.cpp)
+target_link_libraries(go2_sport_client unitree_sdk2)
+
+add_executable(go2_low_level go2_low_level.cpp)
+target_link_libraries(go2_low_level unitree_sdk2)
+
+add_executable(go2_stand_example go2_stand_example.cpp)
+target_link_libraries(go2_stand_example unitree_sdk2)
+
+
+add_executable(go2_robot_state_client go2_robot_state_client.cpp)
+target_link_libraries(go2_robot_state_client unitree_sdk2)
+
+add_executable(go2_video_client go2_video_client.cpp)
+target_link_libraries(go2_video_client unitree_sdk2)
+
+add_executable(go2_vui_client go2_vui_client.cpp)
+target_link_libraries(go2_vui_client unitree_sdk2)
+
+add_executable(go2_motor_errors go2_motor_errors.cpp)
+target_link_libraries(go2_motor_errors unitree_sdk2)
+
+add_executable(go2_simple_movement go2_simple_movement.cpp)
+target_link_libraries(go2_simple_movement unitree_sdk2)
+
+add_executable(go2_motor_command_values go2_motor_command_values.cpp)
+target_link_libraries(go2_motor_command_values unitree_sdk2)
+
+add_executable(Single_move_Go2 Single_move_Go2.cpp)
+target_link_libraries(Single_move_Go2 unitree_sdk2)
+
+add_executable(Single_FrontJump_Go2 Single_FrontJump_Go2.cpp)
+target_link_libraries(Single_FrontJump_Go2 unitree_sdk2)
+
+add_executable(Single_HandStand_Go2 Single_HandStand_Go2.cpp)
+target_link_libraries(Single_HandStand_Go2 unitree_sdk2)
+
+add_executable(HandStand_and_Move HandStand_and_Move.cpp)
+target_link_libraries(HandStand_and_Move unitree_sdk2)
+
+add_executable(Single_WalkUpright_Go2 Single_WalkUpright_Go2.cpp)
+target_link_libraries(Single_WalkUpright_Go2 unitree_sdk2)
+
+add_executable(go2_backward_movement go2_backward_movement.cpp)
+target_link_libraries(go2_backward_movement unitree_sdk2)
+
+add_executable(go2_simple_left_movement go2_simple_left_movement.cpp)
+target_link_libraries(go2_simple_left_movement unitree_sdk2)
+
+add_executable(Move_and_Jump_Lid Move_and_Jump_Lid.cpp)
+target_link_libraries(Move_and_Jump_Lid unitree_sdk2)
+
+add_executable(More_conditions_mj More_conditions_mj.cpp)
+target_link_libraries(More_conditions_mj unitree_sdk2)
+
+add_executable(HSconditions_and_move HSconditions_and_move.cpp)
+target_link_libraries(HSconditions_and_move unitree_sdk2)
+
+add_executable(Demo_live_Go2 Demo_live_Go2.cpp)
+target_link_libraries(Demo_live_Go2 unitree_sdk2)
+
+add_executable(pla2exec planner.cc)
+target_link_libraries(pla2exec  unitree_sdk2)
+
+add_executable(rudra_plan rudra_planner.cc)
+target_link_libraries(rudra_plan  unitree_sdk2)
+
+

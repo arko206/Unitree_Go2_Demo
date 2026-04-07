@@ -88,12 +88,12 @@ Then press `Ctrl + PageDown`.
 
 ## Inside the Docker Container
 
--`dock` - Launch RViz. 
+- `dock` - Launch RViz. 
 - alias dock='cd /home/arka/ && docker start -ai MountedGo2_arka_u20'
 
 
--`getp` -  Getting Waypoints and Visulaizing
+- `getp` -  Getting Waypoints and Visulaizing
 - alias getp = './pla2exec && python3 visualize.py'
 
--`runp` -  Executing the Waypoints on the Robot
+- `runp` -  Executing the Waypoints on the Robot
 - alias runp = './go2_simple_left_movement enp132s0'

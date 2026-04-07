@@ -54,3 +54,54 @@ In the original notes, **CP** means `Ctrl + PageUp`. :contentReference[oaicite:1
 
 ```bash
 t10
+
+## Launch sequence by terminal
+
+### S1
+Open camera parameters.  
+Then press `Ctrl + PageUp`.
+
+### S2
+Open rectified image parameters.  
+Then press `Ctrl + PageUp`.
+
+### S3
+Start AprilTag detection.  
+Then press `Ctrl + PageUp`.
+
+### S4
+Launch robot description / robot launcher.  
+Then press `Ctrl + PageUp`.
+
+### S5
+Start mapping between ROS 2 joint names and the launch-file naming.  
+Then press `Ctrl + PageUp`.
+
+### S6
+Run TF estimation.  
+Then press `Ctrl + PageUp`.
+
+### S7
+Launch RViz.  
+Verify the visualization after launch.
+
+### S8
+Get transformation values.  
+This step is used after RViz verification and after the `query.cfg` step.
+
+---
+
+## Verification and execution workflow
+
+After **S7**, confirm that RViz can find and display the expected objects, especially the AprilTag.
+
+Then return to the terminal window, move to the next terminal, and run the `query.cfg` step before **S8**.
+
+After **S8**, enter the Docker container using:
+
+```bash
+dock
+
+getp
+
+runp

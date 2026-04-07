@@ -10,6 +10,8 @@ This repository contains demo-related packages and scripts used for:
 - Executing the final plan on the Unitree Go2 robot
 
 ---
+This project implements an AprilTag-based perception and SE(2) planning pipeline for the Unitree Go2 robot. A webcam detects tags placed on the robot's head, obstacles, goal, and floor to estimate robot and object poses in RViz. These poses are used by an RRT planner to generate a collision-free path in an SE(2) environment, and the resulting waypoints are converted into velocity commands for real robot execution.
+
 
 ## Repository contents
 

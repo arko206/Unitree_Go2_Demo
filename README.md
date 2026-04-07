@@ -42,25 +42,18 @@ Before running the demo, make sure your environment is set up with the required 
 The live demo uses a 10-terminal workflow. The navigation shortcuts are:
 
 - `t10` — open 10 terminals
-- `Ctrl + PageUp` — move to the next terminal
-- `Ctrl + PageDown` — move to the previous terminal
-
-In the original notes, **CP** means `Ctrl + PageUp`. :contentReference[oaicite:1]{index=1}
-
+- `Ctrl + PageUp` — move to the previous terminal
+- `Ctrl + PageDown` — move to the next terminal
 ---
 
 ## Demo startup
 
-1. Open a terminal.
-2. Run:
-
-```bash
-t10
 
 ## Launch sequence by terminal
 
-### S1
-Open camera parameters.  
+- 'S1'
+Open camera parameters.
+- alias s1='ros2 run usb_cam usb_cam_node_exe --ros-args --remap __ns:=/usb_cam_1 --params-file /home/arka/Desktop/ros2_ws/src/usb_cam/config/params_3.yaml'
 Then press `Ctrl + PageUp`.
 
 ### S2

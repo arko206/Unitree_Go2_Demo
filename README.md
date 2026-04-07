@@ -29,7 +29,7 @@ You can expand this section later with package-specific details.
 Before running the demo, make sure your environment is set up with the required dependencies, for example:
 
 - ROS 2
-- AprilTag detection pipeline
+- AprilTag detection pipeline (see the "Demo_tags_36h11.yaml" from "apriltag_configurations")
 - RViz
 - Unitree Go2 SDK / communication setup
 - Docker environment for robot execution

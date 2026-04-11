@@ -88,7 +88,7 @@ The live demo uses a 10-terminal workflow. The navigation shortcuts are:
 
 ## Inside the Docker Container
 
-- `dock` - Launch RViz. 
+- `dock` - Get inside the docker
 - alias dock='cd /home/arka/ && docker start -ai MountedGo2_arka_u20'
 
 

@@ -18,3 +18,6 @@ log/
 # IDE settings
 .vscode/
 .idea/
+
+# Editor history files
+**/.history/

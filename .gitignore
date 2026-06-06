@@ -5,3 +5,16 @@ install/
 log/
 .vscode/
 .idea/
+
+# ROS 2 / colcon generated directories
+**/build/
+**/install/
+**/log/
+
+# Python generated files
+**/__pycache__/
+*.pyc
+
+# IDE settings
+.vscode/
+.idea/

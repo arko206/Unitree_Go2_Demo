@@ -1,274 +1,662 @@
 /**********************************************************************
- Copyright (c) 2020-2023, Unitree Robotics.Co.Ltd. All rights reserved.
+ Navigation-only Unitree Go2 movement and state logger.
+
+ - Uses SportClient only.
+ - No ObstaclesAvoidClient.
+ - Commands vx = 0.2 m/s for one real second.
+ - Sends zero velocity and StopMove() when the duration is reached.
+ - Ctrl+C requests the same explicit stop sequence.
 ***********************************************************************/
 
-#include <cmath>
-#include <unitree/robot/go2/sport/sport_client.hpp>
-#include <unitree/robot/channel/channel_subscriber.hpp>
-#include <unitree/idl/go2/SportModeState_.hpp>
-#include <unitree/robot/go2/obstacles_avoid/obstacles_avoid_client.hpp>
-#include <fstream>
-#include <locale>
+#include <atomic>
 #include <chrono>
-#include <iomanip>
+#include <cmath>
+#include <csignal>
+#include <cstdint>
 #include <ctime>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <locale>
 #include <sstream>
-#include <unistd.h>
-// [2] Defines the topic name from which state feedback is subscribed.
-#define TOPIC_HIGHSTATE "rt/sportmodestate"
+#include <thread>
+#include <filesystem>
+#include <string>
 
-using namespace unitree::common;
+#include <unitree/robot/go2/sport/sport_client.hpp>
+#include <unitree/robot/channel/channel_factory.hpp>
 
-enum test_mode
+
+
+std::atomic<bool> g_stop_requested{false};
+
+void SignalHandler(int)
 {
-  /*---Basic motion---*/
-  normal_stand,
-  balance_stand,
-  velocity_move,
-  stand_down,
-  stand_up,
-  damp,
-  recovery_stand,
-  /*---Special motion ---*/
-  sit,
-  rise_sit,
-  stop_move = 99
-};
+  // Do not call robot APIs inside the signal handler.
+  // The normal control flow will notice this flag and stop the robot.
+  g_stop_requested.store(true);
+}
+
+// Converts a floating-point velocity value to a string with three decimal places,
+// removing trailing zeros and ensuring a minimum of one decimal place.--##
+std::string VelocityToken(double value)
+{
+    std::ostringstream stream;
+
+    stream
+        << std::fixed
+        << std::setprecision(3)
+        << value;
+
+    std::string text = stream.str();
+    //-- back() = “look at the last character”
+    // --pop_back() = “delete the last character”
+    while (
+        text.size() > 1
+        && text.back() == '0')
+    {
+        text.pop_back();
+    }
+
+    if (!text.empty() && text.back() == '.')
+    {
+        text += '0';
+    }
+
+    if (text == "-0.0")
+    {
+        text = "0.0";
+    }
+
+    return text;
+}
 
 
 class Custom
 {
 public:
-  Custom()
+  Custom(const std::string &command_event_file)
   {
-    // [4] Sets command timeout and initializes the sport client.
-    sport_client.SetTimeout(10.0f);
-    sport_client.Init();
+    // Configure the sport client and initialize its communication.
+    sport_client_.SetTimeout(1.0f);
+    sport_client_.Init();
 
-    obstacles_client.SetTimeout(5.0f);
-    obstacles_client.Init();
-    
+    //--- saving the movement command window data to a CSV file. ---//
+    command_event_logfile_.open(
+        command_event_file,
+        std::ios::out | std::ios::trunc);
 
-    // [5] (a) Creates a subscriber to receive robot state on "rt/sportmodestate" topic
-
-    // [5] (b) When a message is received, it calls the HighStateHandler method.
-    suber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::SportModeState_>(TOPIC_HIGHSTATE));
-    suber->InitChannel(std::bind(&Custom::HighStateHandler, this, std::placeholders::_1), 1);
-
-    
-
-    highstate_logfile_.open("Movement_HighState_pos_log.txt", std::ios::out | std::ios::app);
-    //highstate_logfile_.imbue(std::locale("en_US.UTF-8"));
-    highstate_logfile_.imbue(std::locale::classic());
-
-    if (!highstate_logfile_.is_open())
+    if (!command_event_logfile_.is_open())
     {
-        std::cerr << "Failed to open log file!" << std::endl;
-    }
-
-
-
-    footpos_velocity_logfile_.open( "Foot_log.txt", std::ios::out | std::ios::app);
-    //footpos_velocity_logfile_.imbue(std::locale("en_US.UTF-8"));
-    footpos_velocity_logfile_.imbue(std::locale::classic());
-
-    if (!footpos_velocity_logfile_.is_open())
-    {
-        std::cerr << "Failed to open log file!" << std::endl;
-    }
-
-
-
-
-
-  };
-
-  std::ofstream highstate_logfile_;
-  std::ofstream footpos_velocity_logfile_;
-
-  ~Custom() 
-  {
-    if (highstate_logfile_.is_open())
-        highstate_logfile_.close();
-
-    if (footpos_velocity_logfile_.is_open())
-       footpos_velocity_logfile_.close();
-        
-  }
-
-
-  /// --- Controlling the Robot---///
-  void RobotControl()
-  {
-    ct += dt;
-
-    std::cout << "Elapsed time: " << ct << std::endl;
-
-    if (ct <= 6.0)
-    {
-      std::cout << "Moving forward with obstacle avoidance... " << ct << std::endl;
-
-      if (obstacle_avoidance_enabled)
-      {
-        obstacles_client.Move(1.0, 0.0, 0.0);
-      }
+      std::cerr
+          << "[ERROR] Failed to open command timestamp file: "
+          << command_event_file
+          << std::endl;
     }
     else
     {
-      if (obstacle_avoidance_enabled)
-      {
-        std::cout << "Stopping motion and disabling obstacle avoidance..." << std::endl;
+      command_event_logfile_.imbue(std::locale::classic());
 
-        sport_client.StopMove();  // stop robot motion first
-        obstacles_client.UseRemoteCommandFromApi(false);
-        obstacles_client.SwitchSet(false);
-
-        obstacle_avoidance_enabled = false;
-      }
+      command_event_logfile_
+          << "event,"
+          << "wall_time_ns,"
+          << "timestamp_iso,"
+          << "vx,"
+          << "vy,"
+          << "vyaw\n"
+          << std::flush;
     }
-  };
-  // Get initial position
-  void GetInitState()
+
+  }
+
+  ~Custom()
   {
-    // [6] Stores the robot’s initial position and yaw (orientation)
-    px0 = state.position()[0];
-    py0 = state.position()[1];
-    yaw0 = state.imu_state().rpy()[2];
-    std::cout << "initial position: x0: " << px0 << ", y0: " << py0 << ", yaw0: " << yaw0 << std::endl;
+    // Idempotent fallback in case normal control flow exits early.
+    StopRobot();
 
-    /// have to add BalanceStand functionality and Static Walk Functionality
-    // sport_client.BalanceStand();
-    // std::cout << "Mode of the Go2 is: " << static_cast<int>(state.mode()) << std::endl;
-    // sleep(5);
-    sport_client.StaticWalk();
-    //sport_client.FreeWalk();
-    std::cout << "Mode of the Go2 is: " << static_cast<int>(state.mode()) << std::endl;
-
-
-    obstacles_client.SwitchSet(true);
-    usleep(1000000);
-    obstacles_client.UseRemoteCommandFromApi(true);
-    obstacle_avoidance_enabled = true;
-
-  };
-
-  // [7] Called when a new message is received
-  // Updates state and prints position and orientation (rpy)
-  void HighStateHandler(const void *message)
-  {
-    state = *(unitree_go::msg::dds_::SportModeState_ *)message;
-
-    auto now = std::chrono::system_clock::now();
-    std::time_t now_time = std::chrono::system_clock::to_time_t(now);
-    std::tm *now_tm = std::localtime(&now_time);
-    std::ostringstream time_stream;
-    time_stream << "[" << std::put_time(now_tm, "%Y-%m-%d %H:%M:%S") << "]";
-
-
-    if (highstate_logfile_.is_open())
+    if (command_event_logfile_.is_open())
     {
-        highstate_logfile_ << time_stream.str() << " Position: "
-                          << state.position()[0] << ", "
-                          << state.position()[1] << ", "
-                          << state.position()[2] << " | IMU RPY: "
-                          << state.imu_state().rpy()[0] << ", "
-                          << state.imu_state().rpy()[1] << ", "
-                          << state.imu_state().rpy()[2] << " | Angular Vel: "
-                          << state.imu_state().gyroscope()[0] << ", "
-                          << state.imu_state().gyroscope()[1] << ", "
-                          << state.imu_state().gyroscope()[2] << " | Acceleration: "
-                          << state.imu_state().accelerometer()[0] << ", "
-                          << state.imu_state().accelerometer()[1] << ", "
-                          << state.imu_state().accelerometer()[2] << " | Quaternion: "
-                          << state.imu_state().quaternion()[0] << ","
-                          << state.imu_state().quaternion()[1] << ","
-                          << state.imu_state().quaternion()[2] << ","
-                          << state.imu_state().quaternion()[3] << "| Mode: "
-                          << static_cast<int>(state.mode()) << std::endl;
+      command_event_logfile_.close();
+    }
+  }
 
-        highstate_logfile_ << std::flush;
+  bool GetInitState()
+  {
+    std::cout
+        << "[INIT] Robot initialized; preparing to send movement commands."
+        << std::endl;
 
+    // Retained from the user's original navigation code.
+    // Prepare the robot for walking mode.
+    const int32_t static_walk_ret =
+        sport_client_.StaticWalk();
+
+    std::cout << "[INIT] StaticWalk(), return="
+              << static_walk_ret << std::endl;
+
+    if (static_walk_ret != 0)
+    {
+      std::cerr
+          << "[ERROR] StaticWalk() failed. "
+             "No velocity command will be sent."
+          << std::endl;
+      return false;
     }
 
-    //to fp = state.foot_position_body();
+    // Pause this thread for 500 milliseconds so the robot has time to
+    // settle into walk-ready mode before we start sending motion commands.
+    // This is C++ thread sleep time, not Python time. It suspends only this
+    // thread in the current process.
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(500));
 
-
-    if (footpos_velocity_logfile_.is_open()){
-
-
-        footpos_velocity_logfile_ << time_stream.str() << "Velocity:"
-                                  << "Velocity along x-axis:" << state.velocity()[0] << ","
-                                  << "Velocity along y-axis:" << state.velocity()[1] << ","
-                                  << "Velocity along z-axis:" << state.velocity()[2] << ","
-                                  << "FR(x,y,z)=" << state.foot_position_body()[0] << "," << state.foot_position_body()[1] << "," << state.foot_position_body()[2]<< ","
-                                  << "FL(x,y,z)=" << state.foot_position_body()[3] << "," << state.foot_position_body()[4] << "," << state.foot_position_body()[5]<< ","
-                                  << "RR(x,y,z)=" << state.foot_position_body()[6] << "," << state.foot_position_body()[7]<< "," << state.foot_position_body()[8]<< ","
-                                  << "RL(x,y,z)=" << state.foot_position_body()[9] << "," << state.foot_position_body()[10]<< "," << state.foot_position_body()[11]
-                                  << std::endl;
-
-        
-        footpos_velocity_logfile_ << std::flush;
-
-
-
+    motion_ready_ = true;
+    return true;
+  }
+  
+  //---Check this Function for the RunForwardFor() function, which commands the robot to move forward for a specified duration.---//  
+  void RunForwardFor(
+      double duration_seconds,
+      float vx,
+      float vy,
+      float vyaw)
+  {
+    // Confirm that initialization succeeded before sending motion commands.
+    if (!motion_ready_)
+    {
+      std::cerr
+          << "[ERROR] Motion mode is not ready. "
+             "The robot will not be commanded."
+          << std::endl;
+      StopRobot();
+      return;
     }
 
-  };
+    if (duration_seconds <= 0.0)
+    {
+      std::cerr
+          << "[ERROR] duration_seconds must be positive."
+          << std::endl;
+      StopRobot();
+      return;
+    }
 
-  unitree_go::msg::dds_::SportModeState_ state;
-  unitree::robot::go2::SportClient sport_client;
-  unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::SportModeState_> suber;
+    if (!command_event_logfile_.is_open())
+    {
+      std::cerr
+          << "[ERROR] Command timestamp file is unavailable. "
+            "The robot will not be commanded."
+          << std::endl;
 
-  unitree::robot::go2::ObstaclesAvoidClient obstacles_client;
-  bool obstacle_avoidance_enabled = false;
+      StopRobot();
+      return;
+    }
 
-  double px0, py0, yaw0; // 初始状态的位置和偏航
-  double ct = 0;         // 运行时间
-  int flag = 0;          // 特殊动作执行标志
-  float dt = 0.005;      // 控制步长0.001~0.01
+  
 
-  //custom addition to make the robot stop moving after 2 times of movement
-  // int call_count = 0;
-  // int TEST_MODE = velocity_move;
+    // Log the motion request before entering the control loop.
+    std::cout
+        << "[MOVE] Commanding SportClient::Move("
+        << vx << ", " << vy << ", " << vyaw
+        << ") for " << duration_seconds
+        << " real seconds."
+        << std::endl;
+
+
+
+    using Clock = std::chrono::steady_clock;
+
+    const auto start_time = Clock::now();
+    auto next_status_time = start_time;
+    bool first_move_command = true;
+
+   
+
+    while (!g_stop_requested.load())
+    {
+      const auto now = Clock::now();
+
+      const double elapsed_seconds =
+          std::chrono::duration<double>(
+              now - start_time)
+              .count();
+
+      // Stop once the requested movement duration has elapsed.
+      if (elapsed_seconds >= duration_seconds)
+      {
+        break;
+      }
+
+      std::chrono::system_clock::time_point
+        first_move_command_timestamp;
+
+      if (first_move_command)
+      {
+        // Captured immediately before the first nonzero Move() request.
+        first_move_command_timestamp =
+            std::chrono::system_clock::now();
+      }
+
+      // Send a velocity command to the robot at 50 Hz.
+      const int32_t move_ret =
+          sport_client_.Move(vx, vy, vyaw);
+
+      if (move_ret != 0)
+      {
+        std::cerr
+            << "[ERROR] SportClient::Move() failed, return="
+            << move_ret
+            << ". Executing the stop sequence."
+            << std::endl;
+
+        g_stop_requested.store(true);
+        break;
+      }
+      
+      
+
+      if (first_move_command)
+      {
+        movement_command_started_ = true;
+
+        active_vx_ = vx;
+        active_vy_ = vy;
+        active_vyaw_ = vyaw;
+
+        // The timestamp was captured immediately before Move().
+        // The row is written only after Move() returned successfully.
+        WriteCommandEvent(
+            "MOVE_START",
+            first_move_command_timestamp,
+            vx,
+            vy,
+            vyaw);
+
+        first_move_command = false;
+      }
+
+
+
+
+      if (now >= next_status_time)
+      {
+          std::cout
+              << "[MOVE] Current motion time: "
+              << std::fixed
+              << std::setprecision(3)
+              << elapsed_seconds
+              << " s / "
+              << duration_seconds
+              << " s"
+              << std::endl;
+
+          next_status_time =
+              now + std::chrono::milliseconds(100);
+      }
+
+      // Send high-level velocity commands at 50 Hz.
+      std::this_thread::sleep_for(
+          std::chrono::milliseconds(20));
+    }
+
+    if (g_stop_requested.load())
+    {
+      std::cout
+          << "[MOVE] Interrupt or communication error requested a stop."
+          << std::endl;
+    }
+    else
+    {
+      std::cout
+          << "[MOVE] Requested duration reached."
+          << std::endl;
+    }
+
+    StopRobot();
+  }
+
+  void StopRobot()
+  {
+    // Ensure that only one path executes the stop sequence.
+    if (stop_sequence_started_.exchange(true))
+    {
+      return;
+    }
+
+    // If we previously started moving, record the stop event.
+    if (movement_command_started_)
+    {
+      // Captured before the first zero-velocity command.
+      const auto stop_command_timestamp =
+          std::chrono::system_clock::now();
+
+      WriteCommandEvent(
+          "MOVE_STOP",
+          stop_command_timestamp,
+          0.0f,
+          0.0f,
+          0.0f);
+
+      movement_command_started_ = false;
+    }
+
+
+    std::cout
+        << "[STOP] Sending zero velocity through SportClient..."
+        << std::endl;
+
+    // Send zero velocity more than once to improve robustness
+    // over the Wi-Fi connection.
+    for (int attempt = 1; attempt <= 3; ++attempt)
+    {
+      const int32_t zero_ret =
+          sport_client_.Move(0.0f, 0.0f, 0.0f);
+
+      std::cout
+          << "[STOP] SportClient::Move(0,0,0) "
+          << attempt << "/3, return="
+          << zero_ret << std::endl;
+
+      std::this_thread::sleep_for(
+          std::chrono::milliseconds(20));
+    }
+    // const int32_t stop_ret =
+    //     sport_client_.StopMove();
+
+    // std::cout
+    //     << "[STOP] SportClient::StopMove(), return="
+    //     << stop_ret << std::endl;
+
+    motion_ready_ = false;
+    std::cout
+        << "[STOP] Stop sequence completed."
+        << std::endl;
+  }
+
+private:
+
+  static int64_t SystemTimeToNanoseconds(
+    const std::chrono::system_clock::time_point &time_point)
+    {
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(
+                time_point.time_since_epoch())
+          .count();
+    }
+
+  static std::string SystemTimeToIso(
+      const std::chrono::system_clock::time_point &time_point)
+      {
+        const std::time_t time_value =
+            std::chrono::system_clock::to_time_t(time_point);
+
+        std::tm local_time{};
+        localtime_r(&time_value, &local_time);
+
+        const int64_t milliseconds_since_epoch =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                time_point.time_since_epoch())
+                .count();
+
+        const int milliseconds_part =
+            static_cast<int>(milliseconds_since_epoch % 1000);
+
+        std::ostringstream stream;
+
+        stream << std::put_time(
+                      &local_time,
+                      "%Y-%m-%dT%H:%M:%S")
+              << "."
+              << std::setfill('0')
+              << std::setw(3)
+              << milliseconds_part;
+
+        return stream.str();
+      }
+
+  void WriteCommandEvent(
+      const std::string &event_name,
+      const std::chrono::system_clock::time_point &time_point,
+      float vx,
+      float vy,
+      float vyaw)
+    {
+      if (!command_event_logfile_.is_open())
+      {
+        std::cerr
+            << "[ERROR] Cannot write command event "
+            << event_name
+            << ": timestamp file is not open."
+            << std::endl;
+        return;
+      }
+
+      command_event_logfile_
+          << event_name << ","
+          << SystemTimeToNanoseconds(time_point) << ","
+          << SystemTimeToIso(time_point) << ","
+          << vx << ","
+          << vy << ","
+          << vyaw << "\n"
+          << std::flush;
+
+      std::cout
+          << "[TIMESTAMP] "
+          << event_name
+          << " at "
+          << SystemTimeToIso(time_point)
+          << std::endl;
+    }
+
+  unitree::robot::go2::SportClient sport_client_;
+
+  std::atomic<bool> stop_sequence_started_{false};
+
+  bool motion_ready_ = false;
+
+  bool movement_command_started_ = false;
+
+  float active_vx_ = 0.0f;
+  float active_vy_ = 0.0f;
+  float active_vyaw_ = 0.0f;
+
+  std::ofstream command_event_logfile_;
 };
-
-using namespace unitree::common;
-using namespace unitree::robot;
-using namespace unitree::robot::go2;
 
 int main(int argc, char **argv)
 {
-  if (argc < 2)
+  if (argc < 7)
   {
-    std::cout << "Usage: " << argv[0] << " networkInterface" << std::endl;
-    exit(-1);
+      std::cerr
+          << "Usage: "
+          << argv[0]
+          << " networkInterface"
+          << " trialNumber"
+          << " vx"
+          << " vy"
+          << " vyaw"
+          << " durationSeconds"
+          << std::endl;
+
+      return 1;
   }
 
-  unitree::robot::ChannelFactory::Instance()->Init(0, argv[1]);
-
-  Custom custom;
+ 
 
   std::locale::global(std::locale::classic());
   std::cout.imbue(std::locale::classic());
   std::cerr.imbue(std::locale::classic());
 
-  sleep(1);
+  std::signal(SIGINT, SignalHandler);
+  std::signal(SIGTERM, SignalHandler);
 
-  custom.GetInitState();
-  
-  // crete a recurrent thread that runs every  5 milliseconds and calls the RobotControl method
-  unitree::common::ThreadPtr threadPtr =
-      unitree::common::CreateRecurrentThread(
-          custom.dt * 1000000,
-          std::bind(&Custom::RobotControl, &custom));
+ // Validate and parse command-line arguments.
+  int trial_number;
+  float vx;
+  float vy;
+  float vyaw;
+  double duration_seconds;
 
-  //Because RobotControl() is a method inside the Custom class, the thread needs to know 
-  //which object it belongs to.
-
-  while (1)
+  try
   {
-    sleep(10);
+      trial_number =
+          std::stoi(argv[2]);
+
+      vx =
+          std::stof(argv[3]);
+
+      vy =
+          std::stof(argv[4]);
+
+      vyaw =
+          std::stof(argv[5]);
+
+      duration_seconds =
+          std::stod(argv[6]);
   }
+  catch (const std::exception &error)
+  {
+      std::cerr
+          << "[ERROR] Invalid command-line argument: "
+          << error.what()
+          << std::endl;
+
+      return 1;
+  }
+
+   // Parse command-line arguments and validate them.//
+  if (
+    !std::isfinite(vx)
+    || !std::isfinite(vy)
+    || !std::isfinite(vyaw)
+    || !std::isfinite(duration_seconds))
+  {
+      std::cerr
+          << "[ERROR] vx, vy, vyaw, and durationSeconds "
+          << "must all be finite numbers."
+          << std::endl;
+
+      return 1;
+  }
+
+  if (trial_number < 1)
+  {
+      std::cerr
+          << "[ERROR] trialNumber must be >= 1."
+          << std::endl;
+
+      return 1;
+  }
+
+  if (duration_seconds <= 0.0)
+  {
+      std::cerr
+          << "[ERROR] durationSeconds must be positive."
+          << std::endl;
+
+      return 1;
+  }
+
+  // Construct the output directory path based on the trial number. 
+  // and velcoity parameters.
+  const std::string vx_token =
+    VelocityToken(vx);
+
+  const std::string vy_token =
+      VelocityToken(vy);
+
+  const std::string vyaw_token =
+      VelocityToken(vyaw);
+
+  const std::string velocity_suffix =
+      vx_token
+      + "_"
+      + vy_token
+      + "_"
+      + vyaw_token;
+
+  const std::string dataset_root =
+    "/home/unitree-arka/"
+    "Go2_Walk_Base_Data_Sensor";
+
+  const std::string trials_directory =
+      dataset_root
+      + "/Trials_"
+      + velocity_suffix;
+
+  const std::string trial_directory =
+      trials_directory
+      + "/Trial_"
+      + std::to_string(trial_number)
+      + "_"
+      + velocity_suffix;
+  try
+  {
+      std::filesystem::create_directories(
+          trial_directory);
+  }
+  catch (const std::filesystem::filesystem_error &error)
+  {
+      std::cerr
+          << "[ERROR] Could not create trial directory: "
+          << error.what()
+          << std::endl;
+
+      return 1;
+  }
+
+  const std::string command_event_file =
+    trial_directory
+    + "/cmd_w_"
+    + velocity_suffix
+    + ".csv";
+    
+
+  unitree::robot::ChannelFactory::Instance()->Init(
+      0,
+      argv[1]);
+
+  Custom custom(command_event_file);
+
+  if (!custom.GetInitState())
+  {
+    custom.StopRobot();
+    return 1;
+  }
+
+    std::cout
+    << "[TRIAL] Trial number: "
+    << trial_number
+    << std::endl;
+
+  std::cout
+      << "[TRIAL] Command: ("
+      << vx << ", "
+      << vy << ", "
+      << vyaw << ")"
+      << std::endl;
+
+  std::cout
+      << "[TRIAL] Command duration: "
+      << duration_seconds
+      << " s"
+      << std::endl;
+
+  std::cout
+      << "[TRIAL] Output directory: "
+      << trial_directory
+      << std::endl;
+
+  std::cout
+      << "[TRIAL] Command CSV: "
+      << command_event_file
+      << std::endl;
+
+  custom.RunForwardFor(
+      duration_seconds,
+      vx,
+      vy,
+      vyaw);
+
 
   return 0;
 }

@@ -3,19 +3,11 @@
 ***********************************************************************/
 
 #include <cmath>
-/// [1] These include the Unitree Go2 SDK headers:
-
-    //-- (a) sport_client handles motion commands
-
-    //-- (b) channel_subscriber reads data like robot position, IMU
-
-    //-- (c) SportModeState_ is the DDS message type for robot state
 
 #include <unitree/robot/go2/sport/sport_client.hpp>
 #include <unitree/robot/channel/channel_subscriber.hpp>
 #include <unitree/idl/go2/SportModeState_.hpp>
 
-// [2] Defines the topic name from which state feedback is subscribed.
 #define TOPIC_HIGHSTATE "rt/sportmodestate"
 
 using namespace unitree::common;
@@ -36,11 +28,6 @@ enum test_mode
   stop_move = 99
 };
 
-/// [3] These are predefined robot motions
-
-// One of them is selected at compile-time via:
-
-//const int TEST_MODE = stand_down;
 const int TEST_MODE = stand_down;
 
 class Custom
@@ -48,14 +35,9 @@ class Custom
 public:
   Custom()
   {
-    // [4] Sets command timeout and initializes the sport client.
     sport_client.SetTimeout(10.0f);
     sport_client.Init();
-    
 
-    // [5] (a) Creates a subscriber to receive robot state on "rt/sportmodestate" topic
-
-    // [5] (b) When a message is received, it calls the HighStateHandler method.
     suber.reset(new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::SportModeState_>(TOPIC_HIGHSTATE));
     suber->InitChannel(std::bind(&Custom::HighStateHandler, this, std::placeholders::_1), 1);
   };
@@ -71,19 +53,6 @@ public:
     unitree::robot::go2::PathPoint path_point_tmp;
     std::vector<unitree::robot::go2::PathPoint> path;
 
-    ///newly added
-    // call_count = call_count + 1;
-
-    // if (call_count <= 2){
-    //   TEST_MODE = velocity_move;
-
-    // }
-    // else{
-    //   if (call_count > 2){
-    //     TEST_MODE = stop_move;
-    //   }
-    // }
-
     switch (TEST_MODE)
     {
     case normal_stand:            // 0. idle, default stand
@@ -98,11 +67,7 @@ public:
       break;
 
     case velocity_move: // 2. target velocity walking (controlled by velocity + yawSpeed)
-      //sport_client.Move(0.3, 0, 0.3);
-      sport_client.Move(-0.5, 0, 0);
-      sport_client.StopMove();
-      //sport_client.Move(-0.5, 0, 0);
-      //sport_client.StopMove();
+      sport_client.Move(0.3, 0, 0.3);
       break;
 
     case stand_down: // 4. position stand down.
@@ -149,21 +114,18 @@ public:
   // Get initial position
   void GetInitState()
   {
-    // [6] Stores the robot’s initial position and yaw (orientation)
     px0 = state.position()[0];
     py0 = state.position()[1];
     yaw0 = state.imu_state().rpy()[2];
     std::cout << "initial position: x0: " << px0 << ", y0: " << py0 << ", yaw0: " << yaw0 << std::endl;
   };
 
-  // [7] Called when a new message is received
-  // Updates state and prints position and orientation (rpy)
   void HighStateHandler(const void *message)
   {
     state = *(unitree_go::msg::dds_::SportModeState_ *)message;
 
-    std::cout << "Position: " << state.position()[0] << ", " << state.position()[1] << ", " << state.position()[2] << std::endl;
-    std::cout << "IMU rpy: " << state.imu_state().rpy()[0] << ", " << state.imu_state().rpy()[1] << ", " << state.imu_state().rpy()[2] << std::endl;
+    // std::cout << "Position: " << state.position()[0] << ", " << state.position()[1] << ", " << state.position()[2] << std::endl;
+    // std::cout << "IMU rpy: " << state.imu_state().rpy()[0] << ", " << state.imu_state().rpy()[1] << ", " << state.imu_state().rpy()[2] << std::endl;
   };
 
   unitree_go::msg::dds_::SportModeState_ state;
@@ -174,10 +136,6 @@ public:
   double ct = 0;         // 运行时间
   int flag = 0;          // 特殊动作执行标志
   float dt = 0.005;      // 控制步长0.001~0.01
-
-  //custom addition to make the robot stop moving after 2 times of movement
-  // int call_count = 0;
-  // int TEST_MODE = velocity_move;
 };
 
 int main(int argc, char **argv)
@@ -187,15 +145,13 @@ int main(int argc, char **argv)
     std::cout << "Usage: " << argv[0] << " networkInterface" << std::endl;
     exit(-1);
   }
- // Initializes communication and prepares the robot
+
   unitree::robot::ChannelFactory::Instance()->Init(0, argv[1]);
   Custom custom;
 
   sleep(1); // Wait for 1 second to obtain a stable state
 
   custom.GetInitState(); // Get initial position
-
-  // Creates a periodic thread that calls RobotControl() every dt (5 ms)
   unitree::common::ThreadPtr threadPtr = unitree::common::CreateRecurrentThread(custom.dt * 1000000, std::bind(&Custom::RobotControl, &custom));
 
   while (1)

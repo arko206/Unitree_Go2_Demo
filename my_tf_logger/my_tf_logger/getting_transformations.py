@@ -158,7 +158,7 @@ def plot_floor_se2_entities(output_data: Dict[str, Any], save_fig: bool = True) 
     fig, ax = plt.subplots(figsize=(8, 8))
 
     arrow_len = 0.12
-    robot_radius = 0.25
+    robot_radius = 0.05
 
     # ---------- helper: rotated rectangle ----------
     def rotated_rectangle(cx, cy, theta, length, width):
@@ -240,8 +240,8 @@ def plot_floor_se2_entities(output_data: Dict[str, Any], save_fig: bool = True) 
     obs_new = poses["new_obstacle"]
     obs_new_x, obs_new_y, obs_new_theta = obs_new["x"], obs_new["y"], obs_new["theta"]
 
-    obs_new_length = 0.42
-    obs_new_width = 0.57
+    obs_new_length = 0.57
+    obs_new_width = 0.42
 
     obs_new_rect2 = Polygon(
         rotated_rectangle(obs_new_x, obs_new_y, obs_new_theta, obs_new_length, obs_new_width),
@@ -305,37 +305,11 @@ def plot_floor_se2_entities(output_data: Dict[str, Any], save_fig: bool = True) 
     plt.tight_layout()
 
     if save_fig:
-        fig_path = "/home/arka/Desktop/floor_se2_plot.png"
+        fig_path = "/home/unitree-arka/Desktop/floor_se2_plot.png"
         plt.savefig(fig_path, dpi=200, bbox_inches="tight")
         print(f"Saved SE(2) plot to: {fig_path}")
 
     #plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 import sys
@@ -344,13 +318,13 @@ class FloorTransformSaver(Node):
         super().__init__("floor_transform_saver")
 
         self.declare_parameter("floor_frame", "floor")
-        self.declare_parameter("base_frame", "base_link")
-        self.declare_parameter("object2_frame", "object_2")
-        self.declare_parameter("object3_frame", "object_3")
-        self.declare_parameter("new_obstacle_frame", "new_obstacle")
+        self.declare_parameter("base_frame", "base_link_floor")
+        self.declare_parameter("object2_frame", "object_2_floor")
+        self.declare_parameter("object3_frame", "object_3_floor")
+        self.declare_parameter("new_obstacle_frame", "new_obstacle_floor")
         self.declare_parameter(
             "save_path",
-            "/home/arka/Desktop/floor_world_transforms.json"
+            "/home/unitree-arka/Desktop/floor_world_transforms.json"
         )
 
         self.floor_frame = self.get_parameter("floor_frame").value
@@ -440,7 +414,7 @@ class FloorTransformSaver(Node):
         with open(self.save_path, "w") as f:
             json.dump(output, f, indent=2)
 
-        plot_floor_se2_entities(output, save_fig=True)
+        # plot_floor_se2_entities(output, save_fig=True)
         
 
         self.get_logger().info("Saved transforms successfully.")
@@ -516,7 +490,7 @@ class FloorTransformSaver(Node):
         outstr = outstr + "obs.1.theta = " + str(new_obs_se2['theta']) + "\n"
         outstr = outstr+ "\n"
 
-        docker_path = "/home/arka/unitree_sdk2/build/bin/"
+        docker_path = "/home/unitree-arka/Desktop/"
         filename = docker_path+"query.cfg"
         outfile = open(filename, "w")
 
@@ -539,6 +513,7 @@ def main():
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 
 if __name__ == "__main__":

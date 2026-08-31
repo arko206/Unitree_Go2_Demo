@@ -18,25 +18,13 @@ from std_msgs.msg import ColorRGBA
 # Fixed calibration matrix P*(Rc->T1)
 
 
-# P_star_Rc_to_T1 = np.array([
-# [0.997663, 0.068232 ,0.003653, 0.002185],
-# [0.004445, -0.011456, -0.999925, -0.053204],
-# [-0.068185, 0.997604, -0.011732, -0.093665],
-# [0.000000, 0.000000 ,0.000000 ,1.000000]])
 
-
-# P_star_Rc_to_T1 = np.array([
-# [0.997663, 0.068232 ,0.003653, 0.002185],
-# [0.004445, -0.011456, -0.999925, -0.053204],
-# [-0.068185, 0.997604, -0.011732, -0.093665],
-# [0.000000, 0.000000 ,0.000000 ,1.000000]])
-
-
-P_star_Rc_to_T1= np.array([
-    [0.999666, 0.025621, -0.003426, -0.005381],
-    [-0.003067, -0.014019, -0.999897, -0.053450],
-    [-0.025667, 0.999573, -0.013935, -0.091940],
-    [  0.000000, 0.000000 ,0.000000 ,1.000000]])
+P_star_Rc_to_T1 = np.array([
+    [0.998833, 0.039814, -0.027331, 0.008661],
+    [-0.025861, -0.036982, -0.998981, -0.049915],
+    [-0.040784, 0.998523, -0.035909, -0.107167],
+    [0.000000, 0.000000, 0.000000, 1.000000]
+])
 
 
 
@@ -102,8 +90,8 @@ class TFLogger(Node):
         super().__init__('tf_logger')
 
         # Parameters (you can override with --ros-args -p ...)
-        self.declare_parameter('parent_frame', 'camera_frame')
-        self.declare_parameter('child_frame', 'object')
+        self.declare_parameter('parent_frame', 'camera')
+        self.declare_parameter('child_frame', 'object_1')
         self.declare_parameter('rate_hz', 10.0)  # how often to sample tf
         self.declare_parameter('output_file', os.path.expanduser('~/home/arka/Go2_Walk_Base_Data_Sensor/First_Base_to_cam_movement.txt'))
 
